@@ -10,9 +10,15 @@ MP4_HEIGHT_LIMITS = {
     "480p": 480,
 }
 
+ILLEGAL_FILENAME_CHARS = '\\/:*?"<>|'
+
+
+def sanitize_filename(nome: str) -> str:
+    return "".join("_" if c in ILLEGAL_FILENAME_CHARS else c for c in nome)
+
 
 def build_args(url: str, formato: str, qualidade: str, nome_arquivo: str, pasta: str) -> list[str]:
-    output_template = os.path.join(pasta, f"{nome_arquivo}.%(ext)s")
+    output_template = os.path.join(pasta, f"{sanitize_filename(nome_arquivo)}.%(ext)s")
     args = [YTDLP_EXECUTABLE, "-o", output_template]
 
     if formato == "mp3":
@@ -36,6 +42,8 @@ def fetch_title(url: str) -> str:
         [YTDLP_EXECUTABLE, "--get-title", url],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Falha ao buscar o título do vídeo.")
@@ -49,6 +57,8 @@ def run_download(args, on_output, on_done):
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        encoding="utf-8",
+        errors="replace",
     )
     for line in process.stdout:
         on_output(line.rstrip("\n"))

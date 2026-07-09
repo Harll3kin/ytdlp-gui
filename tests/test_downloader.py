@@ -70,13 +70,25 @@ def test_build_args_formato_invalido_levanta_erro():
         pass
 
 
+def test_build_args_sanitiza_nome_arquivo_com_caracteres_invalidos():
+    args = downloader.build_args(
+        url="https://youtu.be/abc",
+        formato="mp3",
+        qualidade="192",
+        nome_arquivo='Song Name: "Official" Video?',
+        pasta="C:\\Downloads",
+    )
+
+    assert args[2] == 'C:\\Downloads\\Song Name_ _Official_ Video_.%(ext)s'
+
+
 def test_fetch_title_returns_stripped_stdout(monkeypatch):
     class FakeResult:
         returncode = 0
         stdout = "Título do vídeo\n"
         stderr = ""
 
-    def fake_run(cmd, capture_output, text):
+    def fake_run(cmd, capture_output, text, encoding, errors):
         assert cmd == ["yt-dlp", "--get-title", "https://youtu.be/abc"]
         return FakeResult()
 
@@ -93,7 +105,7 @@ def test_fetch_title_raises_on_failure(monkeypatch):
         stdout = ""
         stderr = "erro: vídeo indisponível"
 
-    def fake_run(cmd, capture_output, text):
+    def fake_run(cmd, capture_output, text, encoding, errors):
         return FakeResult()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -113,7 +125,7 @@ def test_run_download_streams_output_and_reports_returncode(monkeypatch):
         def wait(self):
             return None
 
-    def fake_popen(args, stdout, stderr, text, bufsize):
+    def fake_popen(args, stdout, stderr, text, bufsize, encoding, errors):
         return FakeProcess()
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)

@@ -151,13 +151,15 @@ class App:
             self.root.after(0, lambda: self.baixar_button.config(state="normal"))
 
     def _drenar_log(self):
-        while not self.log_queue.empty():
-            linha = self.log_queue.get_nowait()
-            self.log_text.config(state="normal")
-            self.log_text.insert("end", linha + "\n")
-            self.log_text.see("end")
-            self.log_text.config(state="disabled")
-        self.root.after(100, self._drenar_log)
+        try:
+            while not self.log_queue.empty():
+                linha = self.log_queue.get_nowait()
+                self.log_text.config(state="normal")
+                self.log_text.insert("end", linha + "\n")
+                self.log_text.see("end")
+                self.log_text.config(state="disabled")
+        finally:
+            self.root.after(100, self._drenar_log)
 
 
 def main():
