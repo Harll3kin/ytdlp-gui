@@ -1,20 +1,25 @@
 import os
 import queue
 import threading
-import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import StringVar, filedialog
+
+import customtkinter as ctk
 
 import config
 import downloader
+import theme
 
 MP3_QUALIDADES = ["320", "192", "128"]
 MP4_QUALIDADES = ["Melhor", "1080p", "720p", "480p"]
 
+ctk.set_appearance_mode("Dark")
+
 
 class App:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ctk.CTk):
         self.root = root
         self.root.title("yt-dlp GUI")
+        self.root.configure(fg_color=theme.WINDOW_BACKGROUND)
 
         self.cfg = config.load_config()
         self.pasta_atual = self.cfg["last_folder"]
@@ -24,56 +29,137 @@ class App:
         self._montar_ui()
         self.root.after(100, self._drenar_log)
 
-    def _montar_ui(self):
-        frame = ttk.Frame(self.root, padding=10)
-        frame.grid(row=0, column=0, sticky="nsew")
+    def _label(self, parent, texto):
+        ctk.CTkLabel(
+            parent,
+            text=texto.upper(),
+            font=("Segoe UI", 11, "bold"),
+            text_color=theme.TEXT_SECONDARY,
+        ).pack(anchor="w", pady=(0, 6))
 
-        ttk.Label(frame, text="Link do vídeo:").grid(row=0, column=0, sticky="w")
-        self.link_var = tk.StringVar()
-        link_entry = ttk.Entry(frame, textvariable=self.link_var, width=60)
-        link_entry.grid(row=1, column=0, columnspan=3, sticky="ew")
+    def _montar_ui(self):
+        panel = ctk.CTkFrame(self.root, fg_color=theme.BACKGROUND, corner_radius=20)
+        panel.pack(padx=24, pady=24, fill="both", expand=True)
+
+        inner = ctk.CTkFrame(panel, fg_color="transparent")
+        inner.pack(padx=26, pady=26, fill="both", expand=True)
+
+        ctk.CTkLabel(
+            inner, text="▶ yt-dlp GUI", font=("Segoe UI", 16, "bold"), text_color=theme.TEXT_PRIMARY
+        ).pack(anchor="w", pady=(0, 16))
+
+        self._label(inner, "Link do vídeo")
+        self.link_var = StringVar()
+        link_entry = ctk.CTkEntry(
+            inner,
+            textvariable=self.link_var,
+            placeholder_text="Cole o link do YouTube...",
+            width=380,
+            height=40,
+            corner_radius=20,
+            fg_color=theme.INPUT_BACKGROUND,
+            border_color=theme.INPUT_BORDER,
+            border_width=1,
+            text_color=theme.TEXT_PRIMARY,
+            placeholder_text_color=theme.TEXT_PLACEHOLDER,
+        )
+        link_entry.pack(fill="x", pady=(0, 14))
         link_entry.bind("<FocusOut>", self._on_link_focus_out)
 
-        self.formato_var = tk.StringVar(value="mp3")
-        ttk.Radiobutton(
-            frame, text="MP3 (áudio)", variable=self.formato_var, value="mp3",
-            command=self._atualizar_qualidades,
-        ).grid(row=2, column=0, sticky="w")
-        ttk.Radiobutton(
-            frame, text="MP4 (vídeo)", variable=self.formato_var, value="mp4",
-            command=self._atualizar_qualidades,
-        ).grid(row=2, column=1, sticky="w")
+        self._label(inner, "Formato")
+        formato_row = ctk.CTkFrame(inner, fg_color="transparent")
+        formato_row.pack(fill="x", pady=(0, 14))
+        formato_row.columnconfigure((0, 1), weight=1)
 
-        ttk.Label(frame, text="Qualidade:").grid(row=3, column=0, sticky="w")
-        self.qualidade_var = tk.StringVar()
-        self.qualidade_combo = ttk.Combobox(
-            frame, textvariable=self.qualidade_var, state="readonly",
+        self.formato_var = StringVar(value="mp3")
+        self.mp3_button = theme.GradientButton(
+            formato_row, text="MP3", width=180, height=36, command=lambda: self._selecionar_formato("mp3")
         )
-        self.qualidade_combo.grid(row=3, column=1, columnspan=2, sticky="ew")
+        self.mp3_button.grid(row=0, column=0, padx=(0, 6), sticky="ew")
+        self.mp4_button = theme.GradientButton(
+            formato_row, text="MP4", width=180, height=36, command=lambda: self._selecionar_formato("mp4")
+        )
+        self.mp4_button.grid(row=0, column=1, padx=(6, 0), sticky="ew")
+        self.mp3_button.set_active(True)
+        self.mp4_button.set_active(False)
+
+        self.qualidade_var = StringVar()
+        self.qualidade_menu = ctk.CTkOptionMenu(
+            inner,
+            variable=self.qualidade_var,
+            values=MP3_QUALIDADES,
+            width=380,
+            height=36,
+            corner_radius=18,
+            fg_color=theme.INPUT_BACKGROUND,
+            button_color=theme.INPUT_BACKGROUND,
+            button_hover_color=theme.SURFACE,
+            text_color=theme.TEXT_PRIMARY,
+            dropdown_fg_color=theme.INPUT_BACKGROUND,
+            dropdown_text_color=theme.TEXT_PRIMARY,
+        )
+        self.qualidade_menu.pack(fill="x", pady=(0, 14))
         self._atualizar_qualidades()
 
-        ttk.Label(frame, text="Nome do arquivo:").grid(row=4, column=0, sticky="w")
-        self.nome_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.nome_var, width=60).grid(
-            row=5, column=0, columnspan=3, sticky="ew"
+        self._label(inner, "Nome do arquivo")
+        self.nome_var = StringVar()
+        ctk.CTkEntry(
+            inner,
+            textvariable=self.nome_var,
+            width=380,
+            height=40,
+            corner_radius=20,
+            fg_color=theme.INPUT_BACKGROUND,
+            border_color=theme.INPUT_BORDER,
+            border_width=1,
+            text_color=theme.TEXT_PRIMARY,
+        ).pack(fill="x", pady=(0, 14))
+
+        self._label(inner, "Pasta de destino")
+        folder_row = ctk.CTkFrame(inner, fg_color=theme.SURFACE, corner_radius=14)
+        folder_row.pack(fill="x", pady=(0, 20))
+        self.pasta_label = ctk.CTkLabel(
+            folder_row, text=self.pasta_atual, text_color=theme.TEXT_SECONDARY, font=("Segoe UI", 12)
         )
+        self.pasta_label.pack(side="left", padx=14, pady=10)
+        ctk.CTkButton(
+            folder_row,
+            text="Trocar",
+            fg_color="transparent",
+            hover_color=theme.SURFACE,
+            text_color=theme.GRADIENT_END,
+            width=60,
+            command=self._trocar_pasta,
+        ).pack(side="right", padx=10)
 
-        ttk.Label(frame, text="Pasta de destino:").grid(row=6, column=0, sticky="w")
-        self.pasta_label = ttk.Label(frame, text=self.pasta_atual)
-        self.pasta_label.grid(row=7, column=0, columnspan=2, sticky="w")
-        ttk.Button(frame, text="Trocar pasta", command=self._trocar_pasta).grid(
-            row=7, column=2, sticky="e"
+        self.baixar_button = theme.GradientButton(
+            inner, text="Baixar", width=380, height=44, command=self._on_baixar
         )
+        self.baixar_button.pack(fill="x", pady=(0, 18))
 
-        self.baixar_button = ttk.Button(frame, text="Baixar", command=self._on_baixar)
-        self.baixar_button.grid(row=8, column=0, pady=10, sticky="w")
+        status_row = ctk.CTkFrame(inner, fg_color="transparent")
+        status_row.pack(fill="x")
+        self.status_label = ctk.CTkLabel(
+            status_row, text="", text_color=theme.TEXT_SECONDARY, font=("Segoe UI", 12)
+        )
+        self.status_label.pack(side="left")
+        self.percent_label = ctk.CTkLabel(
+            status_row, text="", text_color=theme.GRADIENT_END, font=("Segoe UI", 12, "bold")
+        )
+        self.percent_label.pack(side="right")
 
-        self.log_text = tk.Text(frame, height=12, width=70, state="disabled")
-        self.log_text.grid(row=9, column=0, columnspan=3, sticky="nsew")
+        self.progress_bar = theme.GradientProgressBar(inner, width=380, height=7)
+        self.progress_bar.pack(fill="x", pady=(8, 0))
+
+    def _selecionar_formato(self, formato):
+        self.formato_var.set(formato)
+        self.mp3_button.set_active(formato == "mp3")
+        self.mp4_button.set_active(formato == "mp4")
+        self._atualizar_qualidades()
 
     def _atualizar_qualidades(self):
         valores = MP3_QUALIDADES if self.formato_var.get() == "mp3" else MP4_QUALIDADES
-        self.qualidade_combo["values"] = valores
+        self.qualidade_menu.configure(values=valores)
         self.qualidade_var.set(valores[0])
 
     def _on_link_focus_out(self, event):
@@ -87,13 +173,12 @@ class App:
             titulo = downloader.fetch_title(url)
         except FileNotFoundError:
             self.log_queue.put(
-                "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'."
+                ("status", "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'.")
             )
             return
         except Exception as exc:
-            self.log_queue.put(f"Erro ao buscar título: {exc}")
+            self.log_queue.put(("status", f"Erro ao buscar título: {exc}"))
             return
-        self.log_queue.put(f"Título encontrado: {titulo}")
         self.root.after(0, self._preencher_nome, titulo)
 
     def _preencher_nome(self, titulo):
@@ -106,12 +191,12 @@ class App:
         pasta = filedialog.askdirectory(initialdir=self.pasta_atual)
         if pasta:
             self.pasta_atual = pasta
-            self.pasta_label.config(text=pasta)
+            self.pasta_label.configure(text=pasta)
 
     def _on_baixar(self):
         url = self.link_var.get().strip()
         if not url:
-            self.log_queue.put("Erro: cole um link antes de baixar.")
+            self.log_queue.put(("status", "Erro: cole um link antes de baixar."))
             return
 
         nome_arquivo = self.nome_var.get().strip() or "video"
@@ -123,47 +208,56 @@ class App:
             os.makedirs(pasta, exist_ok=True)
             config.save_config({"last_folder": pasta})
 
-            self.baixar_button.config(state="disabled")
+            self.baixar_button.set_enabled(False)
             args = downloader.build_args(url, formato, qualidade, nome_arquivo, pasta)
         except Exception as exc:
-            self.log_queue.put(f"Erro ao preparar o download: {exc}")
-            self.baixar_button.config(state="normal")
+            self.log_queue.put(("status", f"Erro ao preparar o download: {exc}"))
+            self.baixar_button.set_enabled(True)
             return
 
+        self.log_queue.put(("progress", 0.0))
+        self.log_queue.put(("status", "Baixando..."))
         threading.Thread(target=self._rodar_download, args=(args,), daemon=True).start()
 
     def _rodar_download(self, args):
+        def on_output(linha):
+            fracao = downloader.parse_progress(linha)
+            if fracao is not None:
+                self.log_queue.put(("progress", fracao))
+
+        def on_done(codigo):
+            if codigo == 0:
+                self.log_queue.put(("progress", 1.0))
+                self.log_queue.put(("status", "Concluído."))
+            else:
+                self.log_queue.put(("status", f"Erro: yt-dlp saiu com código {codigo}."))
+
         try:
-            downloader.run_download(
-                args,
-                on_output=lambda linha: self.log_queue.put(linha),
-                on_done=lambda codigo: self.log_queue.put(
-                    "Concluído." if codigo == 0 else f"Erro: yt-dlp saiu com código {codigo}."
-                ),
-            )
+            downloader.run_download(args, on_output=on_output, on_done=on_done)
         except FileNotFoundError:
             self.log_queue.put(
-                "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'."
+                ("status", "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'.")
             )
         except Exception as exc:
-            self.log_queue.put(f"Erro inesperado: {exc}")
+            self.log_queue.put(("status", f"Erro inesperado: {exc}"))
         finally:
-            self.root.after(0, lambda: self.baixar_button.config(state="normal"))
+            self.root.after(0, lambda: self.baixar_button.set_enabled(True))
 
     def _drenar_log(self):
         try:
             while not self.log_queue.empty():
-                linha = self.log_queue.get_nowait()
-                self.log_text.config(state="normal")
-                self.log_text.insert("end", linha + "\n")
-                self.log_text.see("end")
-                self.log_text.config(state="disabled")
+                kind, valor = self.log_queue.get_nowait()
+                if kind == "progress":
+                    self.progress_bar.set_progress(valor)
+                    self.percent_label.configure(text=f"{round(valor * 100)}%")
+                elif kind == "status":
+                    self.status_label.configure(text=valor)
         finally:
             self.root.after(100, self._drenar_log)
 
 
 def main():
-    root = tk.Tk()
+    root = ctk.CTk()
     App(root)
     root.mainloop()
 
