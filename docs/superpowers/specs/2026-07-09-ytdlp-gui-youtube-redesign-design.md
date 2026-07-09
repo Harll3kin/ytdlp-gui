@@ -71,18 +71,23 @@ labels ~11px uppercase; corpo/campos ~13px.
 borda diretamente — sem trabalho extra):
 - Campos de texto (link, nome do arquivo) → `CTkEntry`, cantos bem
   arredondados, estilo barra de busca.
-- Dropdown de qualidade → `CTkComboBox`.
+- Dropdown de qualidade → `CTkOptionMenu` (não `CTkComboBox`: precisa
+  continuar *somente seleção*, sem permitir digitar um valor arbitrário —
+  o resto do sistema depende de `qualidade` ser sempre uma das chaves
+  exatas de `MP4_HEIGHT_LIMITS`/`MP3_QUALIDADES`).
 - Chip da pasta + botão "Trocar" (texto vermelho, sem fundo em pílula) →
   `CTkLabel` + `CTkButton` com `fg_color="transparent"`.
-- Pílula de formato **inativa** → `CTkButton` com cor sólida `#212121`.
 
 **Componentes customizados** (exigem desenho manual com Pillow, pois
 precisam do gradiente):
-- `GradientButton`: botão em pílula com fundo em gradiente e texto
-  centralizado desenhado na própria imagem. Usado no botão "Baixar" e na
-  pílula de formato **ativa**. Tem um estado "hover" (variante mais clara)
-  e um estado "disabled" (variante acinzentada, para quando o botão
-  "Baixar" fica desabilitado durante o download).
+- `GradientButton`: botão em pílula com fundo em gradiente (estado
+  "ativo") ou cor sólida `#212121` (estado "inativo"), texto centralizado
+  desenhado na própria imagem. Usado no botão "Baixar" (sempre ativo) e
+  nas duas pílulas de formato MP3/MP4 (cada uma alterna entre ativa e
+  inativa conforme a seleção — por isso as duas usam o mesmo componente,
+  em vez de uma ser `GradientButton` e a outra um `CTkButton` nativo).
+  Tem variantes de hover (mais clara) e "disabled" (acinzentada, para
+  quando o botão "Baixar" fica desabilitado durante o download).
 - `GradientProgressBar`: barra de progresso em pílula. Trilho cinza
   (`#272727`) sempre visível; por cima, um recorte da imagem de gradiente
   pré-renderizada, com largura proporcional ao progresso atual (0.0–1.0).
