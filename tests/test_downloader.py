@@ -137,3 +137,22 @@ def test_run_download_streams_output_and_reports_returncode(monkeypatch):
 
     assert linhas == ["linha 1", "linha 2"]
     assert codigos == [0]
+
+
+def test_parse_progress_extracts_percentage_as_fraction():
+    linha = "[download]  45.2% of   10.00MiB at    1.21MiB/s ETA 00:04"
+    assert downloader.parse_progress(linha) == 0.452
+
+
+def test_parse_progress_handles_whole_number_percentage():
+    linha = "[download] 100% of   10.00MiB in 00:00:08"
+    assert downloader.parse_progress(linha) == 1.0
+
+
+def test_parse_progress_returns_none_for_non_progress_line():
+    linha = "[ExtractAudio] Destination: song.mp3"
+    assert downloader.parse_progress(linha) is None
+
+
+def test_parse_progress_returns_none_for_empty_line():
+    assert downloader.parse_progress("") is None

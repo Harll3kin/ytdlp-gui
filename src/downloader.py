@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 
 YTDLP_EXECUTABLE = "yt-dlp"
@@ -66,3 +67,13 @@ def run_download(args, on_output, on_done):
         on_output(line.rstrip("\n"))
     process.wait()
     on_done(process.returncode)
+
+
+_PROGRESS_RE = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
+
+
+def parse_progress(line: str) -> float | None:
+    match = _PROGRESS_RE.search(line)
+    if match is None:
+        return None
+    return float(match.group(1)) / 100.0
