@@ -119,11 +119,17 @@ class App:
         qualidade = self.qualidade_var.get()
         pasta = self.pasta_atual
 
-        os.makedirs(pasta, exist_ok=True)
-        config.save_config({"last_folder": pasta})
+        try:
+            os.makedirs(pasta, exist_ok=True)
+            config.save_config({"last_folder": pasta})
 
-        self.baixar_button.config(state="disabled")
-        args = downloader.build_args(url, formato, qualidade, nome_arquivo, pasta)
+            self.baixar_button.config(state="disabled")
+            args = downloader.build_args(url, formato, qualidade, nome_arquivo, pasta)
+        except Exception as exc:
+            self.log_queue.put(f"Erro ao preparar o download: {exc}")
+            self.baixar_button.config(state="normal")
+            return
+
         threading.Thread(target=self._rodar_download, args=(args,), daemon=True).start()
 
     def _rodar_download(self, args):
