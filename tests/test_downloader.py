@@ -88,7 +88,7 @@ def test_fetch_title_returns_stripped_stdout(monkeypatch):
         stdout = "Título do vídeo\n"
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, encoding, errors):
+    def fake_run(cmd, capture_output, text, encoding, errors, creationflags):
         assert cmd == ["yt-dlp", "--get-title", "https://youtu.be/abc"]
         return FakeResult()
 
@@ -105,7 +105,7 @@ def test_fetch_title_raises_on_failure(monkeypatch):
         stdout = ""
         stderr = "erro: vídeo indisponível"
 
-    def fake_run(cmd, capture_output, text, encoding, errors):
+    def fake_run(cmd, capture_output, text, encoding, errors, creationflags):
         return FakeResult()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -125,7 +125,7 @@ def test_run_download_streams_output_and_reports_returncode(monkeypatch):
         def wait(self):
             return None
 
-    def fake_popen(args, stdout, stderr, text, bufsize, encoding, errors):
+    def fake_popen(args, stdout, stderr, text, bufsize, encoding, errors, creationflags):
         return FakeProcess()
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)

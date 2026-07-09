@@ -44,6 +44,7 @@ def fetch_title(url: str) -> str:
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Falha ao buscar o título do vídeo.")
@@ -59,6 +60,7 @@ def run_download(args, on_output, on_done):
         bufsize=1,
         encoding="utf-8",
         errors="replace",
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     for line in process.stdout:
         on_output(line.rstrip("\n"))
