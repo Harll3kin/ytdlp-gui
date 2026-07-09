@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 YTDLP_EXECUTABLE = "yt-dlp"
 
@@ -28,3 +29,28 @@ def build_args(url: str, formato: str, qualidade: str, nome_arquivo: str, pasta:
 
     args.append(url)
     return args
+
+
+def fetch_title(url: str) -> str:
+    result = subprocess.run(
+        [YTDLP_EXECUTABLE, "--get-title", url],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "Falha ao buscar o título do vídeo.")
+    return result.stdout.strip()
+
+
+def run_download(args, on_output, on_done):
+    process = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in process.stdout:
+        on_output(line.rstrip("\n"))
+    process.wait()
+    on_done(process.returncode)
