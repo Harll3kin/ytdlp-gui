@@ -118,11 +118,11 @@ class GradientButton(ctk.CTkButton):
             return variant + "_hover"
         return variant
 
-    def _on_enter(self, _event):
+    def _on_enter(self, _event=None):
         self._mouse_inside = True
         self.configure(image=self._images[self._display_variant()])
 
-    def _on_leave(self, _event):
+    def _on_leave(self, _event=None):
         self._mouse_inside = False
         self.configure(image=self._images[self._current_variant()])
 
