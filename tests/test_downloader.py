@@ -42,7 +42,7 @@ def test_build_args_mp4_melhor_qualidade():
     args = downloader.build_args(
         url="https://youtu.be/abc",
         formato="mp4",
-        qualidade="Melhor",
+        qualidade="Best",
         nome_arquivo="meu video",
         pasta="C:\\Downloads",
     )
@@ -61,7 +61,7 @@ def test_build_args_formato_invalido_levanta_erro():
         downloader.build_args(
             url="https://youtu.be/abc",
             formato="avi",
-            qualidade="Melhor",
+            qualidade="Best",
             nome_arquivo="x",
             pasta="C:\\Downloads",
         )

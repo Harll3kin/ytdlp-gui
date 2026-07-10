@@ -5,3 +5,6 @@ build/
 dist/
 *.spec
 config.json
+bin/
+installer/output/
+.superpowers/

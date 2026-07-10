@@ -10,7 +10,7 @@ import downloader
 import theme
 
 MP3_QUALIDADES = ["320", "192", "128"]
-MP4_QUALIDADES = ["Melhor", "1080p", "720p", "480p"]
+MP4_QUALIDADES = ["Best", "1080p", "720p", "480p"]
 
 ctk.set_appearance_mode("Dark")
 
@@ -48,12 +48,12 @@ class App:
             inner, text="▶ yt-dlp GUI", font=("Segoe UI", 16, "bold"), text_color=theme.TEXT_PRIMARY
         ).pack(anchor="w", pady=(0, 16))
 
-        self._label(inner, "Link do vídeo")
+        self._label(inner, "Video link")
         self.link_var = StringVar()
         link_entry = ctk.CTkEntry(
             inner,
             textvariable=self.link_var,
-            placeholder_text="Cole o link do YouTube...",
+            placeholder_text="Paste the YouTube link...",
             width=380,
             height=40,
             corner_radius=20,
@@ -66,7 +66,7 @@ class App:
         link_entry.pack(fill="x", pady=(0, 14))
         link_entry.bind("<FocusOut>", self._on_link_focus_out)
 
-        self._label(inner, "Formato")
+        self._label(inner, "Format")
         formato_row = ctk.CTkFrame(inner, fg_color="transparent")
         formato_row.pack(fill="x", pady=(0, 14))
         formato_row.columnconfigure((0, 1), weight=1)
@@ -101,7 +101,7 @@ class App:
         self.qualidade_menu.pack(fill="x", pady=(0, 14))
         self._atualizar_qualidades()
 
-        self._label(inner, "Nome do arquivo")
+        self._label(inner, "File name")
         self.nome_var = StringVar()
         ctk.CTkEntry(
             inner,
@@ -115,7 +115,7 @@ class App:
             text_color=theme.TEXT_PRIMARY,
         ).pack(fill="x", pady=(0, 14))
 
-        self._label(inner, "Pasta de destino")
+        self._label(inner, "Destination folder")
         folder_row = ctk.CTkFrame(inner, fg_color=theme.SURFACE, corner_radius=14)
         folder_row.pack(fill="x", pady=(0, 20))
         self.pasta_label = ctk.CTkLabel(
@@ -124,7 +124,7 @@ class App:
         self.pasta_label.pack(side="left", padx=14, pady=10)
         ctk.CTkButton(
             folder_row,
-            text="Trocar",
+            text="Change",
             fg_color="transparent",
             hover_color=theme.SURFACE,
             text_color=theme.GRADIENT_END,
@@ -133,7 +133,7 @@ class App:
         ).pack(side="right", padx=10)
 
         self.baixar_button = theme.GradientButton(
-            inner, text="Baixar", width=380, height=44, command=self._on_baixar
+            inner, text="Download", width=380, height=44, command=self._on_baixar
         )
         self.baixar_button.pack(fill="x", pady=(0, 18))
 
@@ -173,11 +173,11 @@ class App:
             titulo = downloader.fetch_title(url)
         except FileNotFoundError:
             self.log_queue.put(
-                ("status", "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'.")
+                ("status", "Error: yt-dlp not found in PATH. Install it with 'pip install yt-dlp'.")
             )
             return
         except Exception as exc:
-            self.log_queue.put(("status", f"Erro ao buscar título: {exc}"))
+            self.log_queue.put(("status", f"Error fetching title: {exc}"))
             return
         self.root.after(0, self._preencher_nome, titulo)
 
@@ -196,7 +196,7 @@ class App:
     def _on_baixar(self):
         url = self.link_var.get().strip()
         if not url:
-            self.log_queue.put(("status", "Erro: cole um link antes de baixar."))
+            self.log_queue.put(("status", "Error: paste a link before downloading."))
             return
 
         nome_arquivo = self.nome_var.get().strip() or "video"
@@ -211,12 +211,12 @@ class App:
             self.baixar_button.set_enabled(False)
             args = downloader.build_args(url, formato, qualidade, nome_arquivo, pasta)
         except Exception as exc:
-            self.log_queue.put(("status", f"Erro ao preparar o download: {exc}"))
+            self.log_queue.put(("status", f"Error preparing the download: {exc}"))
             self.baixar_button.set_enabled(True)
             return
 
         self.log_queue.put(("progress", 0.0))
-        self.log_queue.put(("status", "Baixando..."))
+        self.log_queue.put(("status", "Downloading..."))
         threading.Thread(target=self._rodar_download, args=(args,), daemon=True).start()
 
     def _rodar_download(self, args):
@@ -228,18 +228,18 @@ class App:
         def on_done(codigo):
             if codigo == 0:
                 self.log_queue.put(("progress", 1.0))
-                self.log_queue.put(("status", "Concluído."))
+                self.log_queue.put(("status", "Done."))
             else:
-                self.log_queue.put(("status", f"Erro: yt-dlp saiu com código {codigo}."))
+                self.log_queue.put(("status", f"Error: yt-dlp exited with code {codigo}."))
 
         try:
             downloader.run_download(args, on_output=on_output, on_done=on_done)
         except FileNotFoundError:
             self.log_queue.put(
-                ("status", "Erro: yt-dlp não encontrado no PATH. Instale com 'pip install yt-dlp'.")
+                ("status", "Error: yt-dlp not found in PATH. Install it with 'pip install yt-dlp'.")
             )
         except Exception as exc:
-            self.log_queue.put(("status", f"Erro inesperado: {exc}"))
+            self.log_queue.put(("status", f"Unexpected error: {exc}"))
         finally:
             self.root.after(0, lambda: self.baixar_button.set_enabled(True))
 

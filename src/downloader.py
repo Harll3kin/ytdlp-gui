@@ -1,11 +1,23 @@
 import os
 import re
 import subprocess
+import sys
 
-YTDLP_EXECUTABLE = "yt-dlp"
+
+def _bundled_path(name: str) -> str | None:
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+        bundled_path = os.path.join(base_dir, name)
+        if os.path.exists(bundled_path):
+            return bundled_path
+    return None
+
+
+YTDLP_EXECUTABLE = _bundled_path("yt-dlp.exe") or "yt-dlp"
+FFMPEG_LOCATION = _bundled_path("ffmpeg.exe")
 
 MP4_HEIGHT_LIMITS = {
-    "Melhor": None,
+    "Best": None,
     "1080p": 1080,
     "720p": 720,
     "480p": 480,
@@ -21,6 +33,8 @@ def sanitize_filename(nome: str) -> str:
 def build_args(url: str, formato: str, qualidade: str, nome_arquivo: str, pasta: str) -> list[str]:
     output_template = os.path.join(pasta, f"{sanitize_filename(nome_arquivo)}.%(ext)s")
     args = [YTDLP_EXECUTABLE, "-o", output_template]
+    if FFMPEG_LOCATION is not None:
+        args += ["--ffmpeg-location", FFMPEG_LOCATION]
 
     if formato == "mp3":
         args += ["-x", "--audio-format", "mp3", "--audio-quality", qualidade]
@@ -32,7 +46,7 @@ def build_args(url: str, formato: str, qualidade: str, nome_arquivo: str, pasta:
             args += ["-f", f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"]
         args += ["--merge-output-format", "mp4"]
     else:
-        raise ValueError(f"Formato desconhecido: {formato}")
+        raise ValueError(f"Unknown format: {formato}")
 
     args.append(url)
     return args
@@ -48,7 +62,7 @@ def fetch_title(url: str) -> str:
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Falha ao buscar o título do vídeo.")
+        raise RuntimeError(result.stderr.strip() or "Failed to fetch the video title.")
     return result.stdout.strip()
 
 
