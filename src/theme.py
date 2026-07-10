@@ -90,6 +90,7 @@ class GradientButton(ctk.CTkButton):
         }
         self._is_active = True
         self._is_enabled = True
+        self._mouse_inside = False
 
         super().__init__(
             master,
@@ -118,11 +119,11 @@ class GradientButton(ctk.CTkButton):
         return variant
 
     def _on_enter(self, _event):
-        variant = self._current_variant()
-        if variant in ("active", "inactive"):
-            self.configure(image=self._images[variant + "_hover"])
+        self._mouse_inside = True
+        self.configure(image=self._images[self._display_variant()])
 
     def _on_leave(self, _event):
+        self._mouse_inside = False
         self.configure(image=self._images[self._current_variant()])
 
     def set_active(self, is_active: bool) -> None:
