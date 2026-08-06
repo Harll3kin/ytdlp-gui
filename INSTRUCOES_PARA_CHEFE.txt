@@ -1,0 +1,36 @@
+╔═══════════════════════════════════════════════════════════════╗
+║      yt-dlp GUI - Instruções para o Chefe (Mac)              ║
+║                                                               ║
+║              SÓ 3 PASSOS SUPER SIMPLES                       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+PASSO 1: Copie o script abaixo
+
+  curl -fsSL https://raw.githubusercontent.com/Harll3kin/ytdlp-gui/main/setup_completo_mac.sh -o setup.sh
+
+PASSO 2: Abra Terminal (Cmd + Space, type "terminal")
+
+PASSO 3: Cole NO TERMINAL:
+
+  bash setup.sh
+
+═══════════════════════════════════════════════════════════════
+
+É SÓ ISSO! O script vai:
+  ✅ Verificar/instalar requisitos (perguntando antes)
+  ✅ Baixar o projeto do GitHub
+  ✅ Instalar dependências
+  ✅ Compilar o app
+  ✅ Criar o instalador DMG
+
+Quando terminar, você terá:
+  📍 ytdlp-gui-1.0.0.dmg na pasta atual
+
+═══════════════════════════════════════════════════════════════
+
+PERGUNTAS?
+  • O script pode levar 5-15 minutos (normal)
+  • Se der erro, salve a mensagem e mande pra gente
+  • NÃO feche o Terminal enquanto estiver rodando
+
+═══════════════════════════════════════════════════════════════
