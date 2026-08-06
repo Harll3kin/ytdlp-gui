@@ -157,6 +157,11 @@ class App:
         self.mp4_button.set_active(formato == "mp4")
         self._atualizar_qualidades()
 
+        if formato == "mp4":
+            pasta_assets = r"C:\Users\Renny\Videos\EDIT\ASSETS"
+            self.pasta_atual = pasta_assets
+            self.pasta_label.configure(text=pasta_assets)
+
     def _atualizar_qualidades(self):
         valores = MP3_QUALIDADES if self.formato_var.get() == "mp3" else MP4_QUALIDADES
         self.qualidade_menu.configure(values=valores)

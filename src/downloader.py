@@ -32,18 +32,14 @@ def sanitize_filename(nome: str) -> str:
 
 def build_args(url: str, formato: str, qualidade: str, nome_arquivo: str, pasta: str) -> list[str]:
     output_template = os.path.join(pasta, f"{sanitize_filename(nome_arquivo)}.%(ext)s")
-    args = [YTDLP_EXECUTABLE, "-o", output_template]
+    args = [YTDLP_EXECUTABLE, "-U", "-o", output_template]
     if FFMPEG_LOCATION is not None:
         args += ["--ffmpeg-location", FFMPEG_LOCATION]
 
     if formato == "mp3":
         args += ["-x", "--audio-format", "mp3", "--audio-quality", qualidade]
     elif formato == "mp4":
-        height = MP4_HEIGHT_LIMITS.get(qualidade)
-        if height is None:
-            args += ["-f", "bestvideo+bestaudio/best"]
-        else:
-            args += ["-f", f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"]
+        args += ["-f", "299+140/298+140/135+140/134+140/18/best"]
         args += ["--merge-output-format", "mp4"]
     else:
         raise ValueError(f"Unknown format: {formato}")
