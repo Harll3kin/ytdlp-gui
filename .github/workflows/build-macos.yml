@@ -3,65 +3,211 @@ name: Build macOS DMG
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # yt-dlp_macos is a universal binary (macOS 10.15+), so one file covers both
+  # Intel and Apple Silicon. ffmpeg is per-architecture.
+  YTDLP_VERSION: "2026.07.04"
+  FFMPEG_TAG: "b6.1.1"
 
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: applesilicon
+            ffmpeg_asset: ffmpeg-darwin-arm64
+            ffprobe_asset: ffprobe-darwin-arm64
+          - runner: macos-15-intel
+            arch: intel
+            ffmpeg_asset: ffmpeg-darwin-x64
+            ffprobe_asset: ffprobe-darwin-x64
+
+    runs-on: ${{ matrix.runner }}
+    name: build-${{ matrix.arch }}
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Generate icon
-      run: python generate_icon.py
+      - name: Run unit tests on macOS
+        # Catches macOS-only regressions such as referencing the Windows-only
+        # subprocess.CREATE_NO_WINDOW constant.
+        run: python -m pytest -q
 
-    - name: Download yt-dlp binary
-      run: |
-        mkdir -p build_resources
-        wget https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp_macos -O build_resources/yt-dlp
-        chmod +x build_resources/yt-dlp
+      - name: Download yt-dlp and ffmpeg binaries
+        run: |
+          set -euo pipefail
+          mkdir -p build_resources
 
-    - name: Build macOS app with PyInstaller
-      run: |
-        pyinstaller --onefile --windowed \
-          --name ytdlp-gui \
-          --icon=icon.icns \
-          --collect-all customtkinter \
-          --add-binary "build_resources/yt-dlp:." \
-          src/app.py
+          curl -L --fail --retry 3 --retry-delay 5 \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_macos" \
+            -o build_resources/yt-dlp
 
-    - name: Create DMG installer
-      run: |
-        DMG_NAME="ytdlp-gui-1.0.0.dmg"
-        VOLUME_NAME="yt-dlp GUI"
-        TEMP_DMG="/tmp/ytdlp-gui_temp.dmg"
+          curl -L --fail --retry 3 --retry-delay 5 \
+            "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_TAG}/${{ matrix.ffmpeg_asset }}" \
+            -o build_resources/ffmpeg
 
-        rm -f "dist/$DMG_NAME"
-        hdiutil create -volname "$VOLUME_NAME" -srcfolder "dist/ytdlp-gui.app" -ov -format UDZO "dist/$TEMP_DMG"
-        mv "$TEMP_DMG" "dist/$DMG_NAME"
+          curl -L --fail --retry 3 --retry-delay 5 \
+            "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_TAG}/${{ matrix.ffprobe_asset }}" \
+            -o build_resources/ffprobe
 
-        echo "DMG_PATH=dist/$DMG_NAME" >> $GITHUB_ENV
+          chmod +x build_resources/*
 
-    - name: Upload DMG as artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: ytdlp-gui-dmg
-        path: dist/ytdlp-gui-1.0.0.dmg
+      - name: Verify downloaded binaries actually run
+        run: |
+          set -euo pipefail
+          echo "--- architecture ---"
+          file build_resources/yt-dlp build_resources/ffmpeg
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: dist/ytdlp-gui-1.0.0.dmg
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "--- yt-dlp ---"
+          ./build_resources/yt-dlp --version
+
+          echo "--- ffmpeg ---"
+          ./build_resources/ffmpeg -hide_banner -version | head -1
+
+          # MP3 export is impossible without an mp3 encoder.
+          echo "--- mp3 encoder ---"
+          ./build_resources/ffmpeg -hide_banner -encoders | grep -q libmp3lame
+          echo "libmp3lame present"
+
+      - name: Generate app icon
+        run: python generate_icon.py
+
+      - name: Build .app with PyInstaller
+        run: |
+          set -euo pipefail
+          ICON_ARG=""
+          if [ -f icon.icns ]; then ICON_ARG="--icon=icon.icns"; fi
+
+          # --onedir (not --onefile): a .app is already a directory, and this
+          # avoids re-extracting ~90 MB of binaries on every launch.
+          pyinstaller --noconfirm --clean --onedir --windowed \
+            --name ytdlp-gui \
+            $ICON_ARG \
+            --collect-all customtkinter \
+            --add-binary "build_resources/yt-dlp:." \
+            --add-binary "build_resources/ffmpeg:." \
+            --add-binary "build_resources/ffprobe:." \
+            src/app.py
+
+      - name: Ad-hoc code sign
+        # arm64 refuses to execute unsigned binaries; an ad-hoc signature is the
+        # minimum needed. This is NOT notarization - Gatekeeper will still warn.
+        run: |
+          set -euo pipefail
+          codesign --force --deep --sign - dist/ytdlp-gui.app
+          codesign --verify --verbose dist/ytdlp-gui.app
+
+      - name: Verify bundled binaries inside the .app
+        run: |
+          set -euo pipefail
+          YTDLP_BIN=$(find dist/ytdlp-gui.app -name 'yt-dlp' -type f | head -1)
+          FFMPEG_BIN=$(find dist/ytdlp-gui.app -name 'ffmpeg' -type f | head -1)
+
+          if [ -z "$YTDLP_BIN" ] || [ -z "$FFMPEG_BIN" ]; then
+            echo "Bundled binaries missing from the app bundle"
+            find dist/ytdlp-gui.app -type f -name '*yt-dlp*' -o -type f -name '*ffmpeg*'
+            exit 1
+          fi
+
+          echo "yt-dlp bundled at: $YTDLP_BIN"
+          echo "ffmpeg bundled at: $FFMPEG_BIN"
+          "$YTDLP_BIN" --version
+          "$FFMPEG_BIN" -hide_banner -version | head -1
+
+          echo "YTDLP_BIN=$YTDLP_BIN" >> "$GITHUB_ENV"
+          echo "FFMPEG_BIN=$FFMPEG_BIN" >> "$GITHUB_ENV"
+
+      - name: Smoke test - real download in H.264 and MP3
+        # Non-blocking: YouTube frequently bot-blocks datacenter IPs, which
+        # would be a CI-network failure rather than a defect in the build.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          OUT=$(mktemp -d)
+          URL="https://youtube.com/shorts/_SRORhIQ3uM"
+
+          SELECTOR=$(PYTHONPATH=src python -c \
+            "import downloader; print(downloader.mp4_format_selector('Best'))")
+          echo "selector: $SELECTOR"
+
+          "$YTDLP_BIN" --ffmpeg-location "$FFMPEG_BIN" \
+            -f "$SELECTOR" --merge-output-format mp4 \
+            -o "$OUT/smoke.%(ext)s" "$URL"
+
+          "$YTDLP_BIN" --ffmpeg-location "$FFMPEG_BIN" \
+            -x --audio-format mp3 --audio-quality 192 \
+            -o "$OUT/smoke_audio.%(ext)s" "$URL"
+
+          FFPROBE_BIN=$(find dist/ytdlp-gui.app -name 'ffprobe' -type f | head -1)
+          CODEC=$("$FFPROBE_BIN" -v error -select_streams v:0 \
+            -show_entries stream=codec_name -of csv=p=0 "$OUT/smoke.mp4")
+
+          echo "video codec: $CODEC"
+          test -f "$OUT/smoke_audio.mp3" || { echo "mp3 not produced"; exit 1; }
+          # av01 is exactly what Premiere Pro cannot import.
+          test "$CODEC" = "h264" || { echo "expected h264, got $CODEC"; exit 1; }
+          echo "Smoke test passed: h264 video + mp3 audio"
+
+      - name: Create DMG
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/tags/*) VERSION="${GITHUB_REF_NAME#v}" ;;
+            *) VERSION="dev-$(git rev-parse --short HEAD)" ;;
+          esac
+
+          DMG_NAME="ytdlp-gui-${VERSION}-macos-${{ matrix.arch }}.dmg"
+          STAGE=$(mktemp -d)
+
+          cp -R dist/ytdlp-gui.app "$STAGE/"
+          # Drop target so the user can drag the app straight into Applications.
+          ln -s /Applications "$STAGE/Applications"
+
+          mkdir -p out
+          hdiutil create \
+            -volname "yt-dlp GUI" \
+            -srcfolder "$STAGE" \
+            -ov -format UDZO \
+            "out/$DMG_NAME"
+
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+          ls -lh "out/$DMG_NAME"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytdlp-gui-macos-${{ matrix.arch }}
+          path: out/*.dmg
+          if-no-files-found: error
+
+      - name: Attach DMG to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.dmg
+          body: |
+            macOS build of yt-dlp GUI.
+
+            - `macos-applesilicon` for M1/M2/M3/M4 Macs
+            - `macos-intel` for Intel Macs
+
+            The app is not notarized. On first launch macOS will block it:
+            open **System Settings > Privacy & Security**, scroll down and
+            click **Open Anyway**.

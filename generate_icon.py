@@ -1,62 +1,71 @@
 #!/usr/bin/env python3
-"""
-Generate a simple icon for the macOS app if it doesn't exist.
-This creates a basic icon.icns file.
+"""Generate icon.icns for the macOS app bundle.
+
+Uses iconutil, which is the supported way to build a multi-resolution .icns;
+`sips -s format icns` only produces a single low-resolution image.
+Failure is not fatal: the build just falls back to the default icon.
 """
 
 import os
+import shutil
 import subprocess
+import sys
+
 from PIL import Image, ImageDraw
 
-def create_simple_icon():
-    """Create a simple icon with YouTube-ish colors."""
+ICONSET = "icon.iconset"
+OUTPUT = "icon.icns"
+SIZES = [16, 32, 64, 128, 256, 512, 1024]
 
-    # Create a simple icon image
-    size = 1024
-    img = Image.new('RGB', (size, size), color='#FF0000')  # Red background (YouTube style)
+
+def draw_icon(size: int) -> Image.Image:
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Add a simple play button in the center
-    margin = size // 4
-    points = [
-        (margin, margin),
-        (size - margin, size // 2),
-        (margin, size - margin)
-    ]
-    draw.polygon(points, fill='white')
+    radius = size // 5
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=radius, fill=(255, 0, 0, 255))
 
-    # Save as PNG first
-    png_path = 'icon_temp.png'
-    img.save(png_path)
+    # Play triangle, centred and optically balanced.
+    left = size * 0.36
+    right = size * 0.72
+    top = size * 0.28
+    bottom = size * 0.72
+    draw.polygon([(left, top), (right, size / 2), (left, bottom)], fill=(255, 255, 255, 255))
+    return img
 
-    # Convert PNG to ICNS using sips (built-in macOS tool)
-    try:
-        subprocess.run([
-            'sips',
-            '-s', 'format', 'icns',
-            png_path,
-            '--out', 'icon.icns'
-        ], check=True, capture_output=True)
-        print("✅ icon.icns created successfully!")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error creating ICNS: {e}")
-        print("You can create an icon manually or use a web tool to convert PNG to ICNS")
-        return False
-    finally:
-        # Clean up temp PNG
-        if os.path.exists(png_path):
-            os.remove(png_path)
 
-    return True
+def main() -> int:
+    if sys.platform != "darwin":
+        print("icon.icns is only needed on macOS; skipping.")
+        return 0
 
-if __name__ == '__main__':
-    if os.path.exists('icon.icns'):
-        print("✅ icon.icns already exists!")
-    else:
-        print("Creating icon.icns...")
-        try:
-            create_simple_icon()
-        except ImportError:
-            print("⚠️  Pillow not installed. Installing...")
-            subprocess.run(['pip3', 'install', 'Pillow'], check=True)
-            create_simple_icon()
+    if not shutil.which("iconutil"):
+        print("iconutil not available; skipping icon generation.")
+        return 0
+
+    shutil.rmtree(ICONSET, ignore_errors=True)
+    os.makedirs(ICONSET, exist_ok=True)
+
+    for size in SIZES:
+        draw_icon(size).save(os.path.join(ICONSET, f"icon_{size}x{size}.png"))
+        # Retina variant expected by iconutil.
+        if size <= 512:
+            draw_icon(size * 2).save(os.path.join(ICONSET, f"icon_{size}x{size}@2x.png"))
+
+    result = subprocess.run(
+        ["iconutil", "-c", "icns", ICONSET, "-o", OUTPUT],
+        capture_output=True,
+        text=True,
+    )
+    shutil.rmtree(ICONSET, ignore_errors=True)
+
+    if result.returncode != 0:
+        print(f"iconutil failed, continuing without a custom icon: {result.stderr.strip()}")
+        return 0
+
+    print(f"Created {OUTPUT}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

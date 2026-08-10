@@ -1,4 +1,5 @@
 pytest
 pyinstaller
 customtkinter
+pillow
 yt-dlp

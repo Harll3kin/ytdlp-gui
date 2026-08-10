@@ -1,26 +1,26 @@
 import json
 import os
-import sys
 
-DEFAULT_FOLDER = os.path.join(
-    os.path.expanduser("~"), "Videos", "EDIT", "ASSETS", "SFX"
-)
+import paths
+
+DEFAULT_FOLDER = paths.default_download_dir()
 
 
 def config_path() -> str:
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_dir, "config.json")
+    # Kept in the user data dir: a frozen .app cannot write next to its own
+    # executable once it is installed in /Applications.
+    return os.path.join(paths.data_dir(), "config.json")
 
 
 def load_config(path: str | None = None) -> dict:
     path = path or config_path()
     if not os.path.exists(path):
         return {"last_folder": DEFAULT_FOLDER}
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"last_folder": DEFAULT_FOLDER}
     if "last_folder" not in data:
         data["last_folder"] = DEFAULT_FOLDER
     return data

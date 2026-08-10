@@ -1,6 +1,13 @@
+import os
 import subprocess
 
 import downloader
+
+PASTA = os.path.join("C:" + os.sep, "Downloads")
+
+
+def _saida(nome: str) -> str:
+    return os.path.join(PASTA, f"{nome}.%(ext)s")
 
 
 def test_build_args_mp3():
@@ -9,12 +16,12 @@ def test_build_args_mp3():
         formato="mp3",
         qualidade="192",
         nome_arquivo="minha musica",
-        pasta="C:\\Downloads",
+        pasta=PASTA,
     )
 
     assert args == [
         "yt-dlp",
-        "-o", "C:\\Downloads\\minha musica.%(ext)s",
+        "-o", _saida("minha musica"),
         "-x", "--audio-format", "mp3", "--audio-quality", "192",
         "https://youtu.be/abc",
     ]
@@ -26,13 +33,13 @@ def test_build_args_mp4_com_limite_de_altura():
         formato="mp4",
         qualidade="720p",
         nome_arquivo="meu video",
-        pasta="C:\\Downloads",
+        pasta=PASTA,
     )
 
     assert args == [
         "yt-dlp",
-        "-o", "C:\\Downloads\\meu video.%(ext)s",
-        "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]",
+        "-o", _saida("meu video"),
+        "-f", downloader.mp4_format_selector("720p"),
         "--merge-output-format", "mp4",
         "https://youtu.be/abc",
     ]
@@ -44,16 +51,29 @@ def test_build_args_mp4_melhor_qualidade():
         formato="mp4",
         qualidade="Best",
         nome_arquivo="meu video",
-        pasta="C:\\Downloads",
+        pasta=PASTA,
     )
 
     assert args == [
         "yt-dlp",
-        "-o", "C:\\Downloads\\meu video.%(ext)s",
-        "-f", "bestvideo+bestaudio/best",
+        "-o", _saida("meu video"),
+        "-f", downloader.mp4_format_selector("Best"),
         "--merge-output-format", "mp4",
         "https://youtu.be/abc",
     ]
+
+
+def test_build_args_nao_pede_atualizacao_durante_o_download():
+    # Updating is done once at startup, not coupled to every download.
+    args = downloader.build_args(
+        url="https://youtu.be/abc",
+        formato="mp3",
+        qualidade="192",
+        nome_arquivo="x",
+        pasta=PASTA,
+    )
+
+    assert "-U" not in args
 
 
 def test_build_args_formato_invalido_levanta_erro():
@@ -63,7 +83,7 @@ def test_build_args_formato_invalido_levanta_erro():
             formato="avi",
             qualidade="Best",
             nome_arquivo="x",
-            pasta="C:\\Downloads",
+            pasta=PASTA,
         )
         assert False, "esperava ValueError"
     except ValueError:
@@ -76,10 +96,38 @@ def test_build_args_sanitiza_nome_arquivo_com_caracteres_invalidos():
         formato="mp3",
         qualidade="192",
         nome_arquivo='Song Name: "Official" Video?',
-        pasta="C:\\Downloads",
+        pasta=PASTA,
     )
 
-    assert args[2] == 'C:\\Downloads\\Song Name_ _Official_ Video_.%(ext)s'
+    assert args[2] == _saida('Song Name_ _Official_ Video_')
+
+
+def test_mp4_selector_prefere_h264_antes_de_qualquer_fallback():
+    # Premiere Pro cannot decode av01/vp9, so avc1 must be tried first.
+    selector = downloader.mp4_format_selector("Best")
+
+    assert selector.startswith("bestvideo[vcodec^=avc1]")
+    assert "av01" not in selector
+
+
+def test_mp4_selector_aplica_limite_de_altura_em_todas_as_alternativas():
+    selector = downloader.mp4_format_selector("720p")
+
+    assert selector.count("[height<=720]") == len(selector.split("/"))
+
+
+def test_no_window_kwargs_vazio_fora_do_windows(monkeypatch):
+    # subprocess.CREATE_NO_WINDOW does not exist on macOS/Linux.
+    monkeypatch.setattr(downloader, "IS_WINDOWS", False)
+
+    assert downloader._no_window_kwargs() == {}
+
+
+def test_no_window_kwargs_esconde_console_no_windows(monkeypatch):
+    monkeypatch.setattr(downloader, "IS_WINDOWS", True)
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+
+    assert downloader._no_window_kwargs() == {"creationflags": 0x08000000}
 
 
 def test_fetch_title_returns_stripped_stdout(monkeypatch):
@@ -88,7 +136,7 @@ def test_fetch_title_returns_stripped_stdout(monkeypatch):
         stdout = "Título do vídeo\n"
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, encoding, errors, creationflags):
+    def fake_run(cmd, **kwargs):
         assert cmd == ["yt-dlp", "--get-title", "https://youtu.be/abc"]
         return FakeResult()
 
@@ -105,7 +153,7 @@ def test_fetch_title_raises_on_failure(monkeypatch):
         stdout = ""
         stderr = "erro: vídeo indisponível"
 
-    def fake_run(cmd, capture_output, text, encoding, errors, creationflags):
+    def fake_run(cmd, **kwargs):
         return FakeResult()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -117,6 +165,30 @@ def test_fetch_title_raises_on_failure(monkeypatch):
         assert "indisponível" in str(exc)
 
 
+def test_update_ytdlp_reporta_falha_sem_levantar(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    ok, mensagem = downloader.update_ytdlp()
+
+    assert ok is False
+    assert "not found" in mensagem
+
+
+def test_update_ytdlp_sobrevive_a_timeout(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="yt-dlp", timeout=180)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    ok, mensagem = downloader.update_ytdlp()
+
+    assert ok is False
+    assert "timed out" in mensagem
+
+
 def test_run_download_streams_output_and_reports_returncode(monkeypatch):
     class FakeProcess:
         stdout = iter(["linha 1\n", "linha 2\n"])
@@ -125,7 +197,7 @@ def test_run_download_streams_output_and_reports_returncode(monkeypatch):
         def wait(self):
             return None
 
-    def fake_popen(args, stdout, stderr, text, bufsize, encoding, errors, creationflags):
+    def fake_popen(args, **kwargs):
         return FakeProcess()
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)

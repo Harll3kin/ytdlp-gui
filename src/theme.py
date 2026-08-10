@@ -1,4 +1,5 @@
 import os
+import sys
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
@@ -55,13 +56,26 @@ _VARIANT_COLORS = {
 }
 
 
-def _load_font(size: int):
+def _font_candidates() -> list[str]:
+    if sys.platform == "darwin":
+        return [
+            "/System/Library/Fonts/SFNS.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+        ]
     windir = os.environ.get("WINDIR", "C:\\Windows")
-    font_path = os.path.join(windir, "Fonts", "segoeui.ttf")
-    try:
-        return ImageFont.truetype(font_path, size)
-    except OSError:
-        return ImageFont.load_default()
+    return [os.path.join(windir, "Fonts", "segoeui.ttf")]
+
+
+def _load_font(size: int):
+    # PIL's default font is a small bitmap face, so button labels come out
+    # tiny if no real font is found.
+    for font_path in _font_candidates():
+        try:
+            return ImageFont.truetype(font_path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _render_button_image(width, height, text, variant, font_size=14):

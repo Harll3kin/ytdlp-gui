@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 import config
 import downloader
+import paths
 import theme
 
 MP3_QUALIDADES = ["320", "192", "128"]
@@ -23,12 +24,14 @@ class App:
 
         self.cfg = config.load_config()
         self.pasta_atual = self.cfg["last_folder"]
+        # Folder the user picked, restored when switching back from MP4.
+        self.pasta_usuario = self.cfg["last_folder"]
         self.last_auto_title = ""
         self.log_queue = queue.Queue()
 
         self._montar_ui()
         self.root.after(100, self._drenar_log)
-        self.root.after(500, self._check_ytdlp)
+        self.root.after(500, self._atualizar_ytdlp_em_background)
 
     def _label(self, parent, texto):
         ctk.CTkLabel(
@@ -158,10 +161,10 @@ class App:
         self.mp4_button.set_active(formato == "mp4")
         self._atualizar_qualidades()
 
-        if formato == "mp4":
-            pasta_assets = r"C:\Users\Renny\Videos\EDIT\ASSETS"
-            self.pasta_atual = pasta_assets
-            self.pasta_label.configure(text=pasta_assets)
+        # MP4 lands in the editing assets folder; MP3 goes back to the user's choice.
+        destino = paths.assets_dir() if formato == "mp4" else self.pasta_usuario
+        self.pasta_atual = destino
+        self.pasta_label.configure(text=destino)
 
     def _atualizar_qualidades(self):
         valores = MP3_QUALIDADES if self.formato_var.get() == "mp3" else MP4_QUALIDADES
@@ -197,6 +200,7 @@ class App:
         pasta = filedialog.askdirectory(initialdir=self.pasta_atual)
         if pasta:
             self.pasta_atual = pasta
+            self.pasta_usuario = pasta
             self.pasta_label.configure(text=pasta)
 
     def _on_baixar(self):
@@ -249,24 +253,14 @@ class App:
         finally:
             self.root.after(0, lambda: self.baixar_button.set_enabled(True))
 
-    def _check_ytdlp(self):
-        """Check if yt-dlp is installed on first run."""
-        if not downloader.check_ytdlp_installed():
-            result = ctk.CTkInputDialog(
-                text="yt-dlp not found.\n\nInstall it now? (requires internet)",
-                title="Install yt-dlp"
-            ).get_input()
+    def _atualizar_ytdlp_em_background(self):
+        threading.Thread(target=self._rodar_atualizacao, daemon=True).start()
 
-            if result and result.lower() in ("y", "yes"):
-                self.log_queue.put(("status", "Installing yt-dlp..."))
-                threading.Thread(target=self._install_ytdlp_thread, daemon=True).start()
-
-    def _install_ytdlp_thread(self):
-        """Install yt-dlp in background."""
-        if downloader.install_ytdlp():
-            self.log_queue.put(("status", "✅ yt-dlp installed successfully!"))
-        else:
-            self.log_queue.put(("status", "❌ Failed to install yt-dlp. Please install manually: pip install yt-dlp"))
+    def _rodar_atualizacao(self):
+        self.log_queue.put(("status", "Checking for yt-dlp updates..."))
+        ok, mensagem = downloader.update_ytdlp()
+        # A failed update is not fatal: the bundled version still works.
+        self.log_queue.put(("status", mensagem if ok else f"Warning: {mensagem}"))
 
     def _drenar_log(self):
         try:
