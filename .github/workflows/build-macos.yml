@@ -97,11 +97,15 @@ jobs:
 
           # --onedir (not --onefile): a .app is already a directory, and this
           # avoids re-extracting ~90 MB of binaries on every launch.
+          # yt-dlp_macos is itself a PyInstaller onefile binary, with an archive
+          # appended past the end of the Mach-O. It must be copied verbatim:
+          # --add-binary lets PyInstaller and codesign rewrite it, which destroys
+          # that archive ("Could not load PyInstaller's embedded PKG archive").
           pyinstaller --noconfirm --clean --onedir --windowed \
             --name ytdlp-gui \
             $ICON_ARG \
             --collect-all customtkinter \
-            --add-binary "build_resources/yt-dlp:." \
+            --add-data "build_resources/yt-dlp:." \
             --add-binary "build_resources/ffmpeg:." \
             --add-binary "build_resources/ffprobe:." \
             src/app.py
@@ -111,7 +115,15 @@ jobs:
         # minimum needed. This is NOT notarization - Gatekeeper will still warn.
         run: |
           set -euo pipefail
-          codesign --force --deep --sign - dist/ytdlp-gui.app
+          # Deliberately no --deep: it would re-sign the nested yt-dlp and
+          # corrupt it. ffmpeg/ffprobe are plain static binaries, so signing
+          # them individually is safe and keeps them runnable on arm64.
+          for name in ffmpeg ffprobe; do
+            bin=$(find dist/ytdlp-gui.app -name "$name" -type f | head -1)
+            if [ -n "$bin" ]; then codesign --force --sign - "$bin"; fi
+          done
+
+          codesign --force --sign - dist/ytdlp-gui.app
           codesign --verify --verbose dist/ytdlp-gui.app
 
       - name: Verify bundled binaries inside the .app
@@ -126,13 +138,48 @@ jobs:
             exit 1
           fi
 
+          FFPROBE_BIN=$(find dist/ytdlp-gui.app -name 'ffprobe' -type f | head -1)
           echo "yt-dlp bundled at: $YTDLP_BIN"
           echo "ffmpeg bundled at: $FFMPEG_BIN"
+
+          # yt-dlp must survive packaging byte-for-byte; anything that rewrites
+          # it breaks its embedded archive in a way that only shows up at runtime.
+          EXPECTED=$(shasum -a 256 build_resources/yt-dlp | awk '{print $1}')
+          ACTUAL=$(shasum -a 256 "$YTDLP_BIN" | awk '{print $1}')
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "Bundled yt-dlp differs from the downloaded binary."
+            echo "  expected $EXPECTED"
+            echo "  actual   $ACTUAL"
+            exit 1
+          fi
+          echo "yt-dlp is byte-identical to the downloaded binary"
+
           "$YTDLP_BIN" --version
           "$FFMPEG_BIN" -hide_banner -version | head -1
 
           echo "YTDLP_BIN=$YTDLP_BIN" >> "$GITHUB_ENV"
           echo "FFMPEG_BIN=$FFMPEG_BIN" >> "$GITHUB_ENV"
+          echo "FFPROBE_BIN=$FFPROBE_BIN" >> "$GITHUB_ENV"
+
+      - name: Verify ffmpeg can produce the formats the app needs
+        # Offline equivalent of the app's two jobs, so the guarantee does not
+        # depend on YouTube being reachable from a CI IP address.
+        run: |
+          set -euo pipefail
+          OUT=$(mktemp -d)
+
+          "$FFMPEG_BIN" -hide_banner -loglevel error \
+            -f lavfi -i testsrc=size=320x240:rate=30:duration=1 \
+            -c:v libx264 "$OUT/v.mp4"
+          "$FFMPEG_BIN" -hide_banner -loglevel error \
+            -f lavfi -i sine=frequency=440:duration=1 \
+            -c:a libmp3lame "$OUT/a.mp3"
+
+          CODEC=$("$FFPROBE_BIN" -v error -select_streams v:0 \
+            -show_entries stream=codec_name -of csv=p=0 "$OUT/v.mp4")
+          test "$CODEC" = "h264" || { echo "expected h264, got $CODEC"; exit 1; }
+          test -s "$OUT/a.mp3" || { echo "mp3 not produced"; exit 1; }
+          echo "ffmpeg encodes H.264 and MP3 correctly"
 
       - name: Smoke test - real download in H.264 and MP3
         # Non-blocking: YouTube frequently bot-blocks datacenter IPs, which
