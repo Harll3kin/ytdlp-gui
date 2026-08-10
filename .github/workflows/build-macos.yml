@@ -236,11 +236,25 @@ jobs:
           ln -s /Applications "$STAGE/Applications"
 
           mkdir -p out
-          hdiutil create \
-            -volname "yt-dlp GUI" \
-            -srcfolder "$STAGE" \
-            -ov -format UDZO \
-            "out/$DMG_NAME"
+
+          # hdiutil intermittently fails with "Resource busy" on the hosted
+          # runners, usually while Spotlight is still indexing the staged copy.
+          for tentativa in 1 2 3 4 5; do
+            if hdiutil create \
+                 -volname "yt-dlp GUI" \
+                 -srcfolder "$STAGE" \
+                 -ov -format UDZO \
+                 "out/$DMG_NAME"; then
+              break
+            fi
+            if [ "$tentativa" -eq 5 ]; then
+              echo "hdiutil still failing after $tentativa attempts"
+              exit 1
+            fi
+            echo "hdiutil attempt $tentativa failed; retrying in 10s"
+            hdiutil detach "/Volumes/yt-dlp GUI" -force 2>/dev/null || true
+            sleep 10
+          done
 
           echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
           ls -lh "out/$DMG_NAME"
