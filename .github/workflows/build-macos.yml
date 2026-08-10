@@ -1,0 +1,60 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Generate icon
+      run: python generate_icon.py
+
+    - name: Build macOS app with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed \
+          --name ytdlp-gui \
+          --icon=icon.icns \
+          --collect-all customtkinter \
+          src/app.py
+
+    - name: Create DMG installer
+      run: |
+        DMG_NAME="ytdlp-gui-1.0.0.dmg"
+        VOLUME_NAME="yt-dlp GUI"
+        TEMP_DMG="/tmp/ytdlp-gui_temp.dmg"
+
+        rm -f "dist/$DMG_NAME"
+        hdiutil create -volname "$VOLUME_NAME" -srcfolder "dist/ytdlp-gui.app" -ov -format UDZO "dist/$TEMP_DMG"
+        mv "$TEMP_DMG" "dist/$DMG_NAME"
+
+        echo "DMG_PATH=dist/$DMG_NAME" >> $GITHUB_ENV
+
+    - name: Upload DMG as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ytdlp-gui-dmg
+        path: dist/ytdlp-gui-1.0.0.dmg
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: dist/ytdlp-gui-1.0.0.dmg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
