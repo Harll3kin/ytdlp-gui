@@ -98,14 +98,18 @@ jobs:
           # --onedir (not --onefile): a .app is already a directory, and this
           # avoids re-extracting ~90 MB of binaries on every launch.
           # yt-dlp_macos is itself a PyInstaller onefile binary, with an archive
-          # appended past the end of the Mach-O. It must be copied verbatim:
-          # --add-binary lets PyInstaller and codesign rewrite it, which destroys
-          # that archive ("Could not load PyInstaller's embedded PKG archive").
+          # appended past the end of the Mach-O, and it carries its own code
+          # signature. Both PyInstaller and codesign rewrite nested executables,
+          # which corrupts it ("Could not load PyInstaller's embedded PKG
+          # archive"). Shipping it gzipped hides it from that processing; the app
+          # unpacks it on first launch.
+          gzip -9 -c build_resources/yt-dlp > build_resources/yt-dlp.gz
+
           pyinstaller --noconfirm --clean --onedir --windowed \
             --name ytdlp-gui \
             $ICON_ARG \
             --collect-all customtkinter \
-            --add-data "build_resources/yt-dlp:." \
+            --add-data "build_resources/yt-dlp.gz:." \
             --add-binary "build_resources/ffmpeg:." \
             --add-binary "build_resources/ffprobe:." \
             src/app.py
@@ -129,35 +133,40 @@ jobs:
       - name: Verify bundled binaries inside the .app
         run: |
           set -euo pipefail
-          YTDLP_BIN=$(find dist/ytdlp-gui.app -name 'yt-dlp' -type f | head -1)
+          YTDLP_GZ=$(find dist/ytdlp-gui.app -name 'yt-dlp.gz' -type f | head -1)
           FFMPEG_BIN=$(find dist/ytdlp-gui.app -name 'ffmpeg' -type f | head -1)
+          FFPROBE_BIN=$(find dist/ytdlp-gui.app -name 'ffprobe' -type f | head -1)
 
-          if [ -z "$YTDLP_BIN" ] || [ -z "$FFMPEG_BIN" ]; then
-            echo "Bundled binaries missing from the app bundle"
-            find dist/ytdlp-gui.app -type f -name '*yt-dlp*' -o -type f -name '*ffmpeg*'
+          if [ -z "$YTDLP_GZ" ] || [ -z "$FFMPEG_BIN" ] || [ -z "$FFPROBE_BIN" ]; then
+            echo "Bundled payloads missing from the app bundle"
+            find dist/ytdlp-gui.app -type f \( -name '*yt-dlp*' -o -name '*ffmpeg*' -o -name '*ffprobe*' \)
             exit 1
           fi
 
-          FFPROBE_BIN=$(find dist/ytdlp-gui.app -name 'ffprobe' -type f | head -1)
-          echo "yt-dlp bundled at: $YTDLP_BIN"
+          echo "yt-dlp payload at: $YTDLP_GZ"
           echo "ffmpeg bundled at: $FFMPEG_BIN"
 
-          # yt-dlp must survive packaging byte-for-byte; anything that rewrites
-          # it breaks its embedded archive in a way that only shows up at runtime.
+          # Unpack exactly the way the app does at first launch.
+          STAGE=$(mktemp -d)
+          gunzip -c "$YTDLP_GZ" > "$STAGE/yt-dlp"
+          chmod +x "$STAGE/yt-dlp"
+
+          # Byte-identical or the embedded archive and code signature are broken,
+          # which only surfaces at runtime on the user's machine.
           EXPECTED=$(shasum -a 256 build_resources/yt-dlp | awk '{print $1}')
-          ACTUAL=$(shasum -a 256 "$YTDLP_BIN" | awk '{print $1}')
+          ACTUAL=$(shasum -a 256 "$STAGE/yt-dlp" | awk '{print $1}')
           if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "Bundled yt-dlp differs from the downloaded binary."
+            echo "Unpacked yt-dlp differs from the downloaded binary."
             echo "  expected $EXPECTED"
             echo "  actual   $ACTUAL"
             exit 1
           fi
-          echo "yt-dlp is byte-identical to the downloaded binary"
+          echo "yt-dlp survives packaging byte-for-byte"
 
-          "$YTDLP_BIN" --version
+          "$STAGE/yt-dlp" --version
           "$FFMPEG_BIN" -hide_banner -version | head -1
 
-          echo "YTDLP_BIN=$YTDLP_BIN" >> "$GITHUB_ENV"
+          echo "YTDLP_BIN=$STAGE/yt-dlp" >> "$GITHUB_ENV"
           echo "FFMPEG_BIN=$FFMPEG_BIN" >> "$GITHUB_ENV"
           echo "FFPROBE_BIN=$FFPROBE_BIN" >> "$GITHUB_ENV"
 
@@ -202,7 +211,6 @@ jobs:
             -x --audio-format mp3 --audio-quality 192 \
             -o "$OUT/smoke_audio.%(ext)s" "$URL"
 
-          FFPROBE_BIN=$(find dist/ytdlp-gui.app -name 'ffprobe' -type f | head -1)
           CODEC=$("$FFPROBE_BIN" -v error -select_streams v:0 \
             -show_entries stream=codec_name -of csv=p=0 "$OUT/smoke.mp4")
 

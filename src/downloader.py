@@ -1,3 +1,4 @@
+import gzip
 import os
 import re
 import shutil
@@ -47,6 +48,11 @@ def _bundled_path(*names: str) -> str | None:
     return None
 
 
+# Shipped gzipped: yt-dlp is itself a PyInstaller onefile executable with an
+# archive appended past the end of the Mach-O, and code signing rewrites nested
+# executables, which corrupts it. A .gz is not executable code, so nothing in
+# the packaging pipeline touches it.
+BUNDLED_YTDLP_GZ = _bundled_path("yt-dlp.gz")
 BUNDLED_YTDLP = _bundled_path("yt-dlp.exe", "yt-dlp")
 FFMPEG_LOCATION = _bundled_path("ffmpeg.exe", "ffmpeg")
 
@@ -69,22 +75,37 @@ def _make_executable(path: str) -> None:
         pass
 
 
+def _extract_bundled_ytdlp(target: str) -> None:
+    """Materialise the bundled yt-dlp at `target`, byte for byte.
+
+    Written to a temporary file first so an interrupted launch cannot leave a
+    truncated executable behind.
+    """
+    partial = target + ".part"
+    if BUNDLED_YTDLP_GZ is not None:
+        with gzip.open(BUNDLED_YTDLP_GZ, "rb") as src, open(partial, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    else:
+        shutil.copyfile(BUNDLED_YTDLP, partial)
+    os.replace(partial, target)
+
+
 def _resolve_ytdlp() -> str:
     """Return the yt-dlp to run, preferring a writable copy of the bundled one.
 
     `yt-dlp -U` rewrites its own binary. Inside the app bundle that would break
-    the signature, so the bundled binary is copied once into the user data dir
-    and updates are applied there.
+    the code signature, and /Applications is not user-writable, so the bundled
+    binary is unpacked once into the user data dir and updated there.
     """
-    if BUNDLED_YTDLP is None:
+    if BUNDLED_YTDLP_GZ is None and BUNDLED_YTDLP is None:
         return "yt-dlp"
 
     target = os.path.join(paths.bin_dir(), "yt-dlp.exe" if IS_WINDOWS else "yt-dlp")
     if not os.path.exists(target):
         try:
-            shutil.copy2(BUNDLED_YTDLP, target)
+            _extract_bundled_ytdlp(target)
         except OSError:
-            return BUNDLED_YTDLP
+            return BUNDLED_YTDLP or "yt-dlp"
     _make_executable(target)
     return target
 

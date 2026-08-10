@@ -1,3 +1,4 @@
+import gzip
 import os
 import subprocess
 
@@ -128,6 +129,55 @@ def test_no_window_kwargs_esconde_console_no_windows(monkeypatch):
     monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
 
     assert downloader._no_window_kwargs() == {"creationflags": 0x08000000}
+
+
+def test_resolve_ytdlp_usa_o_path_quando_nada_esta_embutido(monkeypatch):
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP_GZ", None)
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP", None)
+
+    assert downloader._resolve_ytdlp() == "yt-dlp"
+
+
+def test_resolve_ytdlp_extrai_gz_preservando_os_bytes(monkeypatch, tmp_path):
+    # The extracted file must be byte-identical: yt-dlp carries its own code
+    # signature, and any change makes macOS refuse to run it on arm64.
+    conteudo = b"\xcf\xfa\xed\xfe payload with trailing archive\x00\x01\x02"
+    origem = tmp_path / "yt-dlp.gz"
+    with gzip.open(origem, "wb") as f:
+        f.write(conteudo)
+
+    destino = tmp_path / "bin"
+    destino.mkdir()
+
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP_GZ", str(origem))
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP", None)
+    monkeypatch.setattr(downloader.paths, "bin_dir", lambda: str(destino))
+
+    caminho = downloader._resolve_ytdlp()
+
+    with open(caminho, "rb") as f:
+        assert f.read() == conteudo
+    assert not os.path.exists(caminho + ".part")
+
+
+def test_resolve_ytdlp_nao_reextrai_por_cima_de_uma_atualizacao(monkeypatch, tmp_path):
+    # 'yt-dlp -U' rewrites this copy; re-extracting would undo every update.
+    origem = tmp_path / "yt-dlp.gz"
+    with gzip.open(origem, "wb") as f:
+        f.write(b"versao embutida")
+
+    destino = tmp_path / "bin"
+    destino.mkdir()
+    ja_atualizado = destino / ("yt-dlp.exe" if downloader.IS_WINDOWS else "yt-dlp")
+    ja_atualizado.write_bytes(b"versao mais nova")
+
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP_GZ", str(origem))
+    monkeypatch.setattr(downloader, "BUNDLED_YTDLP", None)
+    monkeypatch.setattr(downloader.paths, "bin_dir", lambda: str(destino))
+
+    downloader._resolve_ytdlp()
+
+    assert ja_atualizado.read_bytes() == b"versao mais nova"
 
 
 def test_fetch_title_returns_stripped_stdout(monkeypatch):
