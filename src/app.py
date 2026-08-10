@@ -156,9 +156,16 @@ class App:
         self.progress_bar.pack(fill="x", pady=(8, 0))
 
     def _selecionar_formato(self, formato):
+        formato_anterior = self.formato_var.get()
         self.formato_var.set(formato)
         self.mp3_button.set_active(formato == "mp3")
         self.mp4_button.set_active(formato == "mp4")
+
+        # Clicking the format that is already selected must not discard the
+        # quality or the folder the user chose afterwards.
+        if formato == formato_anterior:
+            return
+
         self._atualizar_qualidades()
 
         # MP4 lands in the editing assets folder; MP3 goes back to the user's choice.
