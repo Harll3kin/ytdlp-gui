@@ -28,6 +28,7 @@ class App:
 
         self._montar_ui()
         self.root.after(100, self._drenar_log)
+        self.root.after(500, self._check_ytdlp)
 
     def _label(self, parent, texto):
         ctk.CTkLabel(
@@ -247,6 +248,25 @@ class App:
             self.log_queue.put(("status", f"Unexpected error: {exc}"))
         finally:
             self.root.after(0, lambda: self.baixar_button.set_enabled(True))
+
+    def _check_ytdlp(self):
+        """Check if yt-dlp is installed on first run."""
+        if not downloader.check_ytdlp_installed():
+            result = ctk.CTkInputDialog(
+                text="yt-dlp not found.\n\nInstall it now? (requires internet)",
+                title="Install yt-dlp"
+            ).get_input()
+
+            if result and result.lower() in ("y", "yes"):
+                self.log_queue.put(("status", "Installing yt-dlp..."))
+                threading.Thread(target=self._install_ytdlp_thread, daemon=True).start()
+
+    def _install_ytdlp_thread(self):
+        """Install yt-dlp in background."""
+        if downloader.install_ytdlp():
+            self.log_queue.put(("status", "✅ yt-dlp installed successfully!"))
+        else:
+            self.log_queue.put(("status", "❌ Failed to install yt-dlp. Please install manually: pip install yt-dlp"))
 
     def _drenar_log(self):
         try:

@@ -87,3 +87,31 @@ def parse_progress(line: str) -> float | None:
     if match is None:
         return None
     return float(match.group(1)) / 100.0
+
+
+def check_ytdlp_installed() -> bool:
+    """Check if yt-dlp is installed and accessible."""
+    try:
+        subprocess.run(
+            [YTDLP_EXECUTABLE, "--version"],
+            capture_output=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def install_ytdlp() -> bool:
+    """Install yt-dlp via pip. Returns True if successful."""
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "yt-dlp"],
+            check=True,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
