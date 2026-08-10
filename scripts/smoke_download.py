@@ -24,6 +24,11 @@ import downloader  # noqa: E402
 
 URL = os.environ.get("SMOKE_URL", "https://youtube.com/shorts/_SRORhIQ3uM")
 
+# yt-dlp emits characters the Windows console code page cannot encode, which
+# would crash this script while relaying progress lines.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def main() -> int:
     try:
