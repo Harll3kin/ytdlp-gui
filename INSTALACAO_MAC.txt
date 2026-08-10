@@ -1,0 +1,80 @@
+====================================================================
+  yt-dlp GUI - Instalação no macOS
+====================================================================
+
+Não é preciso instalar Python, yt-dlp ou ffmpeg, nem usar o Terminal.
+Está tudo dentro do app.
+
+Requisito: macOS 10.15 (Catalina) ou mais recente.
+
+
+1. BAIXAR
+--------------------------------------------------------------------
+   https://github.com/Harll3kin/ytdlp-gui/releases/latest
+
+   São dois arquivos. Escolha conforme o seu Mac:
+
+     Chip Apple M1/M2/M3/M4  ->  ...-macos-applesilicon.dmg
+     Processador Intel       ->  ...-macos-intel.dmg
+
+   Para descobrir qual é o seu: menu Apple () > "Sobre este Mac".
+   Se aparecer "Chip Apple M...", use o applesilicon.
+   Se aparecer "Processador Intel", use o intel.
+
+
+2. INSTALAR
+--------------------------------------------------------------------
+   - Abra o arquivo .dmg (duplo-clique)
+   - Arraste "ytdlp-gui" para a pasta Applications
+
+
+3. PRIMEIRA ABERTURA
+--------------------------------------------------------------------
+   O app não é notarizado pela Apple, então o macOS bloqueia a
+   primeira execução com um aviso de "desenvolvedor não verificado".
+   Isso é esperado e não indica problema com o app.
+
+   Para liberar:
+
+     1. Tente abrir o app uma vez (aparece o aviso; clique OK)
+     2. Abra Ajustes do Sistema > Privacidade e Segurança
+     3. Role até o fim - haverá uma linha sobre o ytdlp-gui
+     4. Clique em "Abrir Mesmo Assim"
+
+   Só é necessário na primeira vez.
+
+
+COMO USAR
+--------------------------------------------------------------------
+   - Cole o link do YouTube
+   - Escolha MP3 (áudio) ou MP4 (vídeo)
+   - Clique em Download
+
+   O MP4 é baixado sempre em H.264, o codec que o Premiere Pro
+   aceita. É o que evita o erro "unsupported compression type av01".
+
+   MP4 vai para:  ~/Movies/EDIT/ASSETS
+   MP3 vai para a pasta escolhida na tela.
+
+   O app atualiza o yt-dlp sozinho ao abrir, o que evita o erro
+   HTTP 403 que aparece quando o YouTube muda alguma coisa.
+
+
+DESINSTALAR POR COMPLETO
+--------------------------------------------------------------------
+   1. Arraste o app de Applications para o Lixo
+   2. Apague a pasta:
+        ~/Library/Application Support/ytdlp-gui
+
+   Nada é instalado fora desses dois lugares.
+
+
+SE APARECER ALGUM ERRO
+--------------------------------------------------------------------
+   Tire um print da mensagem e reporte em:
+   https://github.com/Harll3kin/ytdlp-gui/issues
+
+   O app é compilado e testado automaticamente para Intel e Apple
+   Silicon a cada versão.
+
+====================================================================
