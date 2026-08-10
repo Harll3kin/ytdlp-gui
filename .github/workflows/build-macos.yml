@@ -25,12 +25,19 @@ jobs:
     - name: Generate icon
       run: python generate_icon.py
 
+    - name: Download yt-dlp binary
+      run: |
+        mkdir -p build_resources
+        wget https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp_macos -O build_resources/yt-dlp
+        chmod +x build_resources/yt-dlp
+
     - name: Build macOS app with PyInstaller
       run: |
         pyinstaller --onefile --windowed \
           --name ytdlp-gui \
           --icon=icon.icns \
           --collect-all customtkinter \
+          --add-binary "build_resources/yt-dlp:." \
           src/app.py
 
     - name: Create DMG installer
