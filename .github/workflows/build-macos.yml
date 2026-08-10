@@ -196,29 +196,11 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          OUT=$(mktemp -d)
-          URL="https://youtube.com/shorts/_SRORhIQ3uM"
-
-          SELECTOR=$(PYTHONPATH=src python -c \
-            "import downloader; print(downloader.mp4_format_selector('Best'))")
-          echo "selector: $SELECTOR"
-
-          "$YTDLP_BIN" --ffmpeg-location "$FFMPEG_BIN" \
-            -f "$SELECTOR" --merge-output-format mp4 \
-            -o "$OUT/smoke.%(ext)s" "$URL"
-
-          "$YTDLP_BIN" --ffmpeg-location "$FFMPEG_BIN" \
-            -x --audio-format mp3 --audio-quality 192 \
-            -o "$OUT/smoke_audio.%(ext)s" "$URL"
-
-          CODEC=$("$FFPROBE_BIN" -v error -select_streams v:0 \
-            -show_entries stream=codec_name -of csv=p=0 "$OUT/smoke.mp4")
-
-          echo "video codec: $CODEC"
-          test -f "$OUT/smoke_audio.mp3" || { echo "mp3 not produced"; exit 1; }
-          # av01 is exactly what Premiere Pro cannot import.
-          test "$CODEC" = "h264" || { echo "expected h264, got $CODEC"; exit 1; }
-          echo "Smoke test passed: h264 video + mp3 audio"
+          export SMOKE_YTDLP="$YTDLP_BIN"
+          export SMOKE_FFMPEG="$FFMPEG_BIN"
+          export SMOKE_FFPROBE="$FFPROBE_BIN"
+          export SMOKE_OUT=$(mktemp -d)
+          python scripts/smoke_download.py
 
       - name: Create DMG
         run: |

@@ -131,6 +131,44 @@ def test_no_window_kwargs_esconde_console_no_windows(monkeypatch):
     assert downloader._no_window_kwargs() == {"creationflags": 0x08000000}
 
 
+def test_bundled_path_ignora_execucao_fora_do_app(monkeypatch):
+    monkeypatch.setattr(downloader.sys, "frozen", False, raising=False)
+
+    assert downloader._bundled_path("ffmpeg.exe", "ffmpeg") is None
+
+
+def test_bundled_path_encontra_binario_ao_lado_do_executavel(monkeypatch, tmp_path):
+    # Layout produced by the Windows installer: the binaries sit next to
+    # ytdlp-gui.exe in the install directory.
+    exe = tmp_path / "ytdlp-gui.exe"
+    exe.write_bytes(b"")
+    vizinho = tmp_path / "ffmpeg.exe"
+    vizinho.write_bytes(b"")
+
+    monkeypatch.setattr(downloader.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(downloader.sys, "executable", str(exe))
+    monkeypatch.delattr(downloader.sys, "_MEIPASS", raising=False)
+
+    assert downloader._bundled_path("ffmpeg.exe", "ffmpeg") == str(vizinho)
+
+
+def test_bundled_path_prefere_meipass(monkeypatch, tmp_path):
+    # Layout produced by PyInstaller inside the macOS .app, where the payload
+    # directory is not the one holding the executable.
+    meipass = tmp_path / "Frameworks"
+    meipass.mkdir()
+    (meipass / "ffmpeg").write_bytes(b"")
+    exe_dir = tmp_path / "MacOS"
+    exe_dir.mkdir()
+    (exe_dir / "ffmpeg").write_bytes(b"")
+
+    monkeypatch.setattr(downloader.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(downloader.sys, "_MEIPASS", str(meipass), raising=False)
+    monkeypatch.setattr(downloader.sys, "executable", str(exe_dir / "ytdlp-gui"))
+
+    assert downloader._bundled_path("ffmpeg.exe", "ffmpeg") == str(meipass / "ffmpeg")
+
+
 def test_resolve_ytdlp_usa_o_path_quando_nada_esta_embutido(monkeypatch):
     monkeypatch.setattr(downloader, "BUNDLED_YTDLP_GZ", None)
     monkeypatch.setattr(downloader, "BUNDLED_YTDLP", None)
