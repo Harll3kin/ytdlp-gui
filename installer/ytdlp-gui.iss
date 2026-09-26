@@ -8,6 +8,9 @@ AppId={{B3E2C1A4-6F1D-4C7A-9E2B-2F6B7C9A1D3E}}
 AppName=yt-dlp GUI
 AppVersion={#AppVersion}
 AppPublisher=Harll3kin
+; Inno reuses the directory from a previous install by default, which had
+; silently reinstalled into a leftover test folder under %TEMP%.
+UsePreviousAppDir=no
 DefaultDirName={autopf}\yt-dlp GUI
 DefaultGroupName=yt-dlp GUI
 DisableProgramGroupPage=yes
